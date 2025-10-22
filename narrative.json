@@ -1,5 +1,7 @@
 {
-  "section1": "<p>Pending — paste today’s <strong>Macro Tone &amp; overnight markets</strong> here. You can use HTML or plain text.</p>",
-  "section2": "<ul><li>Pending — paste the <strong>Next 7‑day earnings + major event radar</strong> here.</li></ul>",
-  "section3": "<p>Pending — paste the <strong>Advisor‑ready interpretation</strong> (what matters &amp; why) here.</p>"
+  "section1": "<p>Global markets leaned mildly risk-off overnight. U.S. equity futures are flat to slightly negative following a mixed Asia–Europe session. Treasury yields are stabilizing after yesterday’s curve steepening, while DXY holds rangebound near recent highs. Oil is firming modestly on supply concerns, with gold steady as real yields plateau.</p>",
+
+  "section2": "<ul><li><strong>Thu (AMC):</strong> NVDA, CRM — key AI + enterprise software sentiment reads</li><li><strong>Fri 8:30a ET:</strong> Core PCE inflation (consensus +0.2% m/m) — high Fed sensitivity</li><li><strong>Next Week:</strong> FOMC blackout begins; JPM, BAC, WFC kick off money-center banks</li></ul>",
+
+  "section3": "<p>Market appears tactically cautious ahead of Core PCE and early megacap earnings. Breadth has been narrowing, and sensitivity to macro-headline surprises remains elevated — especially long-duration equities. Advisors may want to prep clients around near-term volatility spikes, while emphasizing long-term positioning discipline over single-event reactions.</p>"
 }
