@@ -1,18 +1,21 @@
 name: send-market-pulse
+
 on:
   schedule:
+    # Fire at both UTC times that can correspond to 08:15 ET across DST.
     - cron: '15 12 * * 1-5'
     - cron: '15 13 * * 1-5'
   workflow_dispatch:
     inputs:
       force_send:
-        description: 'Send immediately (ignore 08:15 gate)'
+        description: 'Send immediately (ignore 08:15 ET gate)'
         required: false
         default: 'false'
 
 jobs:
   send:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -22,31 +25,53 @@ jobs:
         with:
           python-version: '3.11'
 
+      # Build the daily HTML from narrative.json
+      - name: Build dynamic report
+        run: |
+          python build_report.py
+
+      # Gate + Send (cron enforces 08:15 ET; manual respects gate unless force_send=true)
       - name: Gate + Send
         env:
+          # SMTP
           SMTP_SERVER: smtp.gmail.com
           SMTP_PORT: 587
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
           TO_EMAIL: ${{ secrets.TO_EMAIL }}
+
+          # Email content/env
           SUBJECT: 'Morning Market Pulse'
           PREVIEW: 'Neutral tone; earnings cluster; policy window ahead.'
-          HTML_PATH: 'morning_market_pulse_sample.html'
+          HTML_PATH: 'morning_market_pulse.html'   # <— built file from previous step
           REPLY_TO: ${{ secrets.REPLY_TO }}
+
+          # Manual override
           FORCE_SEND: ${{ github.event.inputs.force_send }}
         run: |
           echo "Trigger: ${GITHUB_EVENT_NAME}"
-          echo "FORCE_SEND: ${FORCE_SEND}"
+          echo "FORCE_SEND: ${FORCE_SEND:-false}"
           echo "NY time: $(TZ=America/New_York date)"
+          ls -l morning_market_pulse.html || true
 
-          # If cron-triggered AND not forced, enforce the strict 08:15 ET gate
-          if [ "${GITHUB_EVENT_NAME}" = "schedule" ] && [ "${FORCE_SEND}" != "true" ]; then
+          # Decide whether to enforce the 08:15 ET gate:
+          # - Always enforce for scheduled runs
+          # - For manual runs, enforce unless FORCE_SEND=true
+          ENFORCE_GATE="false"
+          if [ "${GITHUB_EVENT_NAME}" = "schedule" ]; then
+            ENFORCE_GATE="true"
+          elif [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] && [ "${FORCE_SEND}" != "true" ]; then
+            ENFORCE_GATE="true"
+          fi
+
+          if [ "${ENFORCE_GATE}" = "true" ]; then
             if [ "$(TZ=America/New_York date +%H%M)" != "0815" ]; then
-              echo "Not 08:15 America/New_York; skipping (scheduled run)."
+              echo "Not 08:15 America/New_York; skipping."
               exit 0
             fi
           fi
 
           echo "Proceeding — sending email now..."
           python send_mail.py
+

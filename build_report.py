@@ -1,135 +1,77 @@
-import os, json, datetime as dt
-from pathlib import Path
-import yfinance as yf
+# build_report.py
+import json, pathlib, datetime, zoneinfo, sys
 
-OUTPUT = Path(os.getenv("OUTPUT_HTML", "morning_market_pulse.html"))
-NARRATIVE = Path(os.getenv("NARRATIVE_JSON", "narrative.json"))
+NARRATIVE_PATH = "narrative.json"
+OUTPUT_PATH    = "morning_market_pulse.html"
 
-# Approx ET (set -5 during EST if runner lacks timezone data)
-NOW_UTC = dt.datetime.now(dt.timezone.utc)
-ET_OFFSET = -4  # EDT now; change to -5 for EST
-NOW_ET = NOW_UTC.astimezone(dt.timezone(dt.timedelta(hours=ET_OFFSET)))
-TODAY_ET = NOW_ET.strftime("%a, %b %d, %Y")
-TS_ET = NOW_ET.strftime("%-I:%M %p ET, %b %d, %Y")
+def load_json(path):
+    return json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
 
-# Read narrative JSON
-try:
-    nar = json.loads(NARRATIVE.read_text(encoding="utf-8"))
-except Exception:
-    nar = {"section1": "", "section2": "", "section3": ""}
+def save_text(path, s):
+    pathlib.Path(path).write_text(s, encoding="utf-8")
 
-s1 = nar.get("section1") or "<p><em>Pending — add to narrative.json → section1</em></p>"
-s2 = nar.get("section2") or "<p><em>Pending — add to narrative.json → section2</em></p>"
-s3 = nar.get("section3") or "<p><em>Pending — add to narrative.json → section3</em></p>"
-
-# Public KPI snapshot (no commentary; numbers only)
-QUOTES = {
-    "S&P Futures": "ES=F",
-    "Nasdaq Futures": "NQ=F",
-    "Russell Futures": "RTY=F",
-    "10Y UST (yield x10)": "^TNX",
-    "DXY (USD)": "DX-Y.NYB",
-    "WTI Crude": "CL=F",
-    "Gold": "GC=F",
-}
-
-def fetch(t):
+def main():
     try:
-        info = yf.Ticker(t).fast_info
-        price = info.get("last_price") or info.get("regular_market_price")
-        prev = info.get("previous_close")
-        pct = None
-        if price is not None and prev not in (None, 0):
-            pct = (price/prev - 1.0) * 100.0
-        return price, pct
-    except Exception:
-        return None, None
+        n = load_json(NARRATIVE_PATH)
+    except Exception as e:
+        sys.exit(f"❌ Failed to read {NARRATIVE_PATH}: {e}")
 
-# KPI tiles
-kpis_html = []
-for label, tick in QUOTES.items():
-    p, c = fetch(tick)
-    price = "—" if p is None else f"{p:,.2f}"
-    pct   = "—" if c is None else f"{c:+.2f}%"
-    kpis_html.append(f"""
-      <div class="kpi">
-        <div class="label">{label}</div>
-        <div class="value">{price} <span class="pill">{pct}</span></div>
-      </div>
-    """)
-kpis_html = "\n".join(kpis_html)
+    s1 = n.get("section1", "<p>(no Section 1 provided)</p>")
+    s2 = n.get("section2", "<p>(no Section 2 provided)</p>")
+    s3 = n.get("section3", "<p>(no Section 3 provided)</p>")
 
-HTML = f"""
-<!DOCTYPE html>
-<html lang="en">
+    # Timestamp in America/New_York
+    ny = zoneinfo.ZoneInfo("America/New_York")
+    now_ny = datetime.datetime.now(tz=ny)
+    date_str = now_ny.strftime("%a, %b %d, %Y")
+    ts_str   = now_ny.strftime("%I:%M %p %Z").lstrip("0")
+
+    html = f"""<!doctype html>
+<html>
 <head>
   <meta charset="utf-8">
+  <title>Morning Market Pulse — {date_str}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Morning Market Pulse — {TODAY_ET}</title>
   <style>
-    body {{ margin:0; padding:0; background:#f5f7fb; font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Arial, sans-serif; }}
-    .container {{ max-width: 720px; margin: 0 auto; background:#ffffff; }}
-    .header {{ padding:20px 24px; border-bottom:1px solid #e6e9f2; }}
-    .tag {{ font-size:12px; letter-spacing:.04em; font-weight:600; color:#4b6bfb; text-transform:uppercase; }}
-    h1 {{ margin:6px 0 0; font-size:20px; line-height:1.3; color:#111; }}
-    .meta {{ color:#667085; font-size:12px; margin-top:4px; }}
-    .section {{ padding:20px 24px; border-top:1px solid #f0f2f7; }}
-    .section h2 {{ font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:#0f172a; margin:0 0 8px; }}
-    .bullet {{ margin:0; padding-left:18px; color:#0f172a; }}
-    .bullet li {{ margin:8px 0; }}
-    .callout {{ background:#f8fafc; border:1px solid #e2e8f0; padding:12px 14px; border-radius:8px; font-size:13px; color:#0f172a; }}
-    .foot {{ padding:16px 24px; color:#64748b; font-size:12px; }}
-    .smallcaps {{ font-variant: all-small-caps; letter-spacing:.06em; }}
-    .disclaimer {{ font-size:11px; color:#667085; line-height:1.45; }}
-    .pill {{ display:inline-block; background:#eef2ff; color:#3730a3; border-radius:999px; padding:2px 8px; font-size:11px; margin-left:6px; }}
-    .grid {{ display:block; }}
-    @media (min-width: 640px) {{
-      .grid {{ display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }}
-    }}
-    .kpi {{ background:#fafafa; border:1px solid #eee; border-radius:10px; padding:10px 12px; }}
-    .kpi .label {{ color:#64748b; font-size:12px; }}
-    .kpi .value {{ font-size:16px; font-weight:700; color:#0f172a; }}
+    body {{ font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin:0; padding:24px; background:#f7f8fa; color:#0f172a; }}
+    .wrap {{ max-width: 720px; margin: 0 auto; }}
+    .h1 {{ font-size: 20px; font-weight: 700; margin: 0 0 4px; }}
+    .meta {{ color:#64748b; font-size:12px; margin:0 0 16px; }}
+    .card {{ background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px 18px; margin: 14px 0; }}
+    .title {{ font-weight:600; margin:0 0 8px; font-size:14px; color:#111827; }}
+    .content {{ font-size:14px; line-height:1.5; color:#111827; }}
+    .foot {{ margin-top:20px; color:#6b7280; font-size:11px; }}
+    .hr {{ height:1px; background:#e5e7eb; border:0; margin:18px 0; }}
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <div class="tag">Morning Market Pulse</div>
-      <h1>Daily Intelligence Brief — {TODAY_ET}</h1>
-      <div class="meta">Timestamp: {TS_ET} &middot; Source discipline: Public data only</div>
+  <div class="wrap">
+    <div class="h1">Morning Market Pulse</div>
+    <div class="meta">Timestamp: {ts_str} • {date_str} • Source discipline: Public data only</div>
+
+    <div class="card">
+      <div class="title">1) Macro Tone &amp; Overnight Markets</div>
+      <div class="content">{s1}</div>
     </div>
 
-    <div class="section">
-      <div class="grid">
-        {kpis_html}
-      </div>
+    <div class="card">
+      <div class="title">2) Next 7-day Earnings + Major Event Radar</div>
+      <div class="content">{s2}</div>
     </div>
 
-    <div class="section">
-      <h2>1) Macro Tone &amp; overnight markets</h2>
-      {s1}
-    </div>
-
-    <div class="section">
-      <h2>2) Next 7-day earnings + major event radar (Fed, CPI, etc.)</h2>
-      {s2}
-    </div>
-
-    <div class="section">
-      <h2>3) Advisor-ready interpretation — what matters + why</h2>
-      {s3}
-      <div class="callout">Guardrails: public data only; no inference of firm/client positions; informational — not investment advice.</div>
+    <div class="card">
+      <div class="title">3) Advisor-ready Interpretation — What Matters &amp; Why</div>
+      <div class="content">{s3}</div>
     </div>
 
     <div class="foot">
-      <div class="disclaimer">
-        Prepared for internal use. Data sourced from public dashboards and official calendars at time of send.
-      </div>
+      Prepared for internal use. Informational only — not investment advice.
     </div>
   </div>
 </body>
-</html>
-"""
+</html>"""
+    save_text(OUTPUT_PATH, html)
+    print(f"✅ Built report → {OUTPUT_PATH}")
 
-OUTPUT.write_text(HTML, encoding="utf-8")
-print("Wrote:", OUTPUT.resolve())
+if __name__ == "__main__":
+    main()
