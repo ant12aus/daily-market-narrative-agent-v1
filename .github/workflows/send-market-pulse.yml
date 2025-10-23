@@ -25,12 +25,9 @@ jobs:
         with:
           python-version: '3.11'
 
-      # Build the daily HTML from narrative.json
       - name: Build dynamic report
-        run: |
-          python build_report.py
+        run: python build_report.py
 
-      # Gate + Send (cron enforces 08:15 ET; manual respects gate unless force_send=true)
       - name: Gate + Send
         env:
           # SMTP
@@ -40,12 +37,16 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
           TO_EMAIL: ${{ secrets.TO_EMAIL }}
-
-          # Email content/env
-          SUBJECT: 'Morning Market Pulse'
-          PREVIEW: 'Neutral tone; earnings cluster; policy window ahead.'
-          HTML_PATH: 'morning_market_pulse.html'   # <— built file from previous step
           REPLY_TO: ${{ secrets.REPLY_TO }}
+
+          # Content paths
+          HTML_PATH: 'morning_market_pulse.html'     # built in previous step
+          # NARRATIVE_PATH: 'narrative.json'         # (optional) only change if you move it
+
+          # Optional toggles / add-ons
+          # CC_EMAIL: ''
+          # BCC_EMAIL: ''
+          # DRY_RUN: 'false'
 
           # Manual override
           FORCE_SEND: ${{ github.event.inputs.force_send }}
@@ -53,9 +54,9 @@ jobs:
           echo "Trigger: ${GITHUB_EVENT_NAME}"
           echo "FORCE_SEND: ${FORCE_SEND:-false}"
           echo "NY time: $(TZ=America/New_York date)"
-          ls -l morning_market_pulse.html || true
+          ls -l "${HTML_PATH}" || true
 
-          # Decide whether to enforce the 08:15 ET gate:
+          # Enforce the 08:15 ET gate:
           # - Always enforce for scheduled runs
           # - For manual runs, enforce unless FORCE_SEND=true
           ENFORCE_GATE="false"
@@ -74,4 +75,3 @@ jobs:
 
           echo "Proceeding — sending email now..."
           python send_mail.py
-
